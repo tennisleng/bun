@@ -264,4 +264,141 @@ console.log("PRELOAD");
       setCwd: true,
     },
   });
+
+  // Test that tsconfig.json in the runtime directory is NOT loaded by standalone executables
+  // The runtime tsconfig has different settings but bundled code should use compile-time settings
+  itBundled("compile/IgnoresRuntimeTsconfig", {
+    compile: true,
+    files: {
+      "/entry.ts": /* ts */ `
+        // Test that compile-time tsconfig settings are used
+        // If runtime tsconfig was loaded, this would fail
+        console.log("tsconfig ignored");
+      `,
+      "/tsconfig.json": /* json */ `
+        {
+          "compilerOptions": {
+            "target": "ES2020"
+          }
+        }
+      `,
+    },
+    runtimeFiles: {
+      // This tsconfig would cause issues if loaded at runtime
+      // because it has completely different settings
+      "/tsconfig.json": /* json */ `
+        {
+          "compilerOptions": {
+            "target": "ES5",
+            "strict": true,
+            "noImplicitAny": true
+          }
+        }
+      `,
+    },
+    run: {
+      stdout: "tsconfig ignored",
+      setCwd: true,
+    },
+  });
+
+  // Test that package.json in the runtime directory is NOT loaded by standalone executables
+  // The runtime package.json has "type": "commonjs" but bundled ESM code should still work
+  itBundled("compile/IgnoresRuntimePackageJson", {
+    compile: true,
+    files: {
+      "/entry.js": /* js */ `
+        // This file uses ESM syntax which was bundled at compile time
+        import { readFileSync } from "fs";
+        console.log("ESM works");
+      `,
+      "/package.json": /* json */ `
+        {
+          "name": "test-package",
+          "type": "module"
+        }
+      `,
+    },
+    runtimeFiles: {
+      // This package.json would potentially cause issues if loaded at runtime
+      // and it tried to interpret the bundled code based on this
+      "/package.json": /* json */ `
+        {
+          "name": "different-package",
+          "type": "commonjs",
+          "main": "wrong-entry.js"
+        }
+      `,
+    },
+    run: {
+      stdout: "ESM works",
+      setCwd: true,
+    },
+  });
+
+  // Test that runtime tsconfig.json paths/baseUrl don't affect module resolution in standalone
+  itBundled("compile/IgnoresRuntimeTsconfigPaths", {
+    compile: true,
+    files: {
+      "/entry.ts": /* ts */ `
+        // At compile time, this resolves correctly
+        import { greet } from "./lib/greet";
+        console.log(greet());
+      `,
+      "/lib/greet.ts": /* ts */ `
+        export function greet() {
+          return "Hello from lib";
+        }
+      `,
+    },
+    runtimeFiles: {
+      // This tsconfig has paths that would break resolution if loaded
+      "/tsconfig.json": /* json */ `
+        {
+          "compilerOptions": {
+            "baseUrl": "./nonexistent",
+            "paths": {
+              "./lib/*": ["./wrong/*"]
+            }
+          }
+        }
+      `,
+    },
+    run: {
+      stdout: "Hello from lib",
+      setCwd: true,
+    },
+  });
+
+  // Test that autoloadTsconfig: true enables runtime tsconfig loading
+  itBundled("compile/AutoloadTsconfigEnabled", {
+    compile: {
+      autoloadTsconfig: true,
+    },
+    files: {
+      "/entry.ts": /* ts */ `
+        console.log("tsconfig loading enabled");
+      `,
+    },
+    run: {
+      stdout: "tsconfig loading enabled",
+      setCwd: true,
+    },
+  });
+
+  // Test that autoloadPackageJson: true enables runtime package.json loading
+  itBundled("compile/AutoloadPackageJsonEnabled", {
+    compile: {
+      autoloadPackageJson: true,
+    },
+    files: {
+      "/entry.js": /* js */ `
+        console.log("package.json loading enabled");
+      `,
+    },
+    run: {
+      stdout: "package.json loading enabled",
+      setCwd: true,
+    },
+  });
 });
